@@ -10,12 +10,11 @@ from .constants import STRING_SYMBOL
 
 # Adapted from: https://stackoverflow.com/questions/11133339/parsing-a-complex-logical-expression-in-pyparsing-in-a-binary-tree-fashion
 class QueryBuilder(object):
-    def __init__(self, obj: Type[DeclarativeMeta]):
-        """
-        Class for building a BinaryExpression from string, or vice versa.
-        :param obj: The object
-        """
+    """
+    Class for building a BinaryExpression from string, or vice versa.
+    """
 
+    def __init__(self, obj: Type[DeclarativeMeta]):
         self._obj = obj
         self._parser = self._build_parser()
         self._schema = AutoMarshmallowSchema.get_schema(obj)
