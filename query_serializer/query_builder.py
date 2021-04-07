@@ -1,10 +1,10 @@
 import pyparsing as pp
-from sqlalchemy import bindparam
 from sqlalchemy.sql.elements import BinaryExpression, BooleanClauseList
 from sqlalchemy.ext.declarative import DeclarativeMeta
+from sqlalchemy.orm import Query
 from typing import Union, Type
 from auto_schema import AutoMarshmallowSchema
-from .operators import OPERATOR_MAP, INVERSE_OPERATOR_MAP, ASSOC_OPERATOR, INVERSE_ASSOC_OPERATOR_MAP
+from sqlalchemy_filters.filters import Operator, apply_filters
 from .constants import STRING_SYMBOL
 
 
@@ -21,7 +21,7 @@ class QueryBuilder(object):
 
     @staticmethod
     def _build_parser():
-        operator = pp.Regex("|".join(OPERATOR_MAP.keys())).setName("operator")
+        operator = pp.Regex("|".join(Operator.OPERATORS.keys())).setName("operator")
         comparison_term = (
             pp.pyparsing_common.iso8601_datetime.copy()
             | pp.pyparsing_common.iso8601_date.copy()
@@ -32,46 +32,41 @@ class QueryBuilder(object):
 
         condition = pp.Group(pp.pyparsing_common.identifier + operator + comparison_term)
 
-        return pp.infixNotation(condition, [(k, 2, pp.opAssoc.LEFT) for k in ASSOC_OPERATOR])
+        return pp.infixNotation(condition, [(k, 2, pp.opAssoc.LEFT) for k in ["and", "or"]])
 
-    def _recursion(self, expr: pp.ParseResults) -> Union[BinaryExpression, BooleanClauseList]:
+    def _make_dict(self, expr: pp.ParseResults):
         if not isinstance(expr[0], pp.ParseResults):
             attr = getattr(self._obj, expr[0])
             value = self._schema(only=[attr.name]).load({attr.name: expr[2]})[attr.name]
 
-            return BinaryExpression(attr, bindparam(None, value, type_=attr.type), OPERATOR_MAP[expr[1]])
+            return [{"field": expr[0], "op": expr[1], "value": value}]
 
-        left = self._recursion(expr[0])
-        for i in range(1, len(expr), 2):
-            operator = expr[i]
-            right = self._recursion(expr[i + 1])
+        left = self._make_dict(expr[0])
+        right = self._make_dict(expr[2])
 
-            left = ASSOC_OPERATOR[operator](left, right)
-
-        return left
+        return [{expr[1]: left + right}]
 
     def to_string(self, expression: Union[BooleanClauseList, BinaryExpression]):
         if isinstance(expression, BooleanClauseList):
             left = self.to_string(expression.clauses[0])
             right = self.to_string(expression.clauses[1])
 
-            return f"({left} {INVERSE_ASSOC_OPERATOR_MAP[expression.operator]} {right})"
+            # We replace the underscore with empty, as this is for `and`/`or`
+            return f"({left} {expression.operator.__name__.replace('_', '')} {right})"
 
         left = expression.left.name
-
-        if issubclass(expression.left.type.python_type, bool):
-            value = str(expression.right)
-        else:
-            value = expression.right.value
-
+        value = str(expression.right) if issubclass(expression.left.type.python_type, bool) else expression.right.value
         right = self._schema(only=[left]).dump({left: value})[left]
 
         if issubclass(getattr(self._obj, expression.left.name).type.python_type, str):
             right = f"{STRING_SYMBOL}{right}{STRING_SYMBOL}"
 
-        return f"({left} {INVERSE_OPERATOR_MAP[expression.operator]} {right})"
+        return f"({left} {expression.operator.__name__} {right})"
 
-    def from_string(self, expression: str):
+    def from_string(self, query: Query, expression: str):
+        return apply_filters(query, self.string_to_filters(expression))
+
+    def string_to_filters(self, expression: str):
         root = self._parser.parseString(expression)[0]
 
-        return self._recursion(root)
+        return self._make_dict(root)

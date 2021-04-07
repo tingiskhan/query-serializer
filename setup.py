@@ -22,7 +22,8 @@ setup(
     description="Library for serializing and deserializing SQLAlchemy queries",
     packages=find_packages(include=(NAME, f"{NAME}.*")),
     install_requires=[
-        "auto_schema @ git+https://github.com/tingiskhan/auto-schema#egg=auto_schema"
+        "auto_schema @ git+https://github.com/tingiskhan/auto-schema#egg=auto_schema",
+        "sqlalchemy_filters @ git+https://github.com/juliotrigo/sqlalchemy-filters",
         "sqlalchemy",
         "pyparsing",
     ],
