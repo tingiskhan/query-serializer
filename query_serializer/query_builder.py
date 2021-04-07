@@ -65,7 +65,7 @@ class QueryBuilder(object):
 
         return f"({left.name} {expression.operator.__name__} {right_value})"
 
-    def from_string(self, query: Query, expression: str):
+    def from_string(self, query: Query, expression: str) -> Query:
         return apply_filters(query, self.string_to_filters(expression))
 
     def string_to_filters(self, expression: str) -> List[Dict[str, Any]]:
