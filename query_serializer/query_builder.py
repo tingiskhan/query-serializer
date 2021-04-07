@@ -2,7 +2,7 @@ import pyparsing as pp
 from sqlalchemy.sql.elements import BinaryExpression, BooleanClauseList
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from sqlalchemy.orm import Query
-from typing import Union, Type
+from typing import Union, Type, List, Dict, Any
 from auto_schema import AutoMarshmallowSchema
 from sqlalchemy_filters.filters import Operator, apply_filters
 from .constants import STRING_SYMBOL
@@ -54,19 +54,21 @@ class QueryBuilder(object):
             # We replace the underscore with empty, as this is for `and`/`or`
             return f"({left} {expression.operator.__name__.replace('_', '')} {right})"
 
-        left = expression.left.name
-        value = str(expression.right) if issubclass(expression.left.type.python_type, bool) else expression.right.value
-        right = self._schema(only=[left]).dump({left: value})[left]
+        left = expression.left
+        right = expression.right
 
-        if issubclass(getattr(self._obj, expression.left.name).type.python_type, str):
-            right = f"{STRING_SYMBOL}{right}{STRING_SYMBOL}"
+        value = str(right) if issubclass(left.type.python_type, bool) else right.value
+        right_value = self._schema(only=[left.name]).dump({left.name: value})[left.name]
 
-        return f"({left} {expression.operator.__name__} {right})"
+        if issubclass(getattr(self._obj, left.name).type.python_type, str):
+            right_value = f"{STRING_SYMBOL}{right_value}{STRING_SYMBOL}"
+
+        return f"({left.name} {expression.operator.__name__} {right_value})"
 
     def from_string(self, query: Query, expression: str):
         return apply_filters(query, self.string_to_filters(expression))
 
-    def string_to_filters(self, expression: str):
+    def string_to_filters(self, expression: str) -> List[Dict[str, Any]]:
         root = self._parser.parseString(expression)[0]
 
         return self._make_dict(root)
